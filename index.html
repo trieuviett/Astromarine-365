@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <title>Sân Nhà Cược — Friendly Match Betting</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=Noto+Serif:wght@400;600;700&display=swap" rel="stylesheet">
 <style>
   :root{
     --pitch-0:#07231a;
@@ -19,7 +22,7 @@
   *{box-sizing:border-box;}
   body{margin:0;padding:0;}
   #app{
-    font-family: 'Georgia', 'Iowan Old Style', serif;
+    font-family: 'Noto Serif', 'Be Vietnam Pro', Georgia, 'Segoe UI', Arial, serif;
     background: repeating-linear-gradient(
         90deg,
         var(--pitch-1) 0px,
@@ -43,7 +46,7 @@
   .brand{display:flex; align-items:baseline; gap:10px;}
   .brand .whistle{font-size: 26px;}
   h1{
-    font-family: 'Futura', 'Trebuchet MS', sans-serif;
+    font-family: 'Be Vietnam Pro', 'Segoe UI', Arial, sans-serif;
     letter-spacing: 2px; text-transform: uppercase;
     font-size: 22px; margin:0; color: var(--gold-bright);
     font-weight:700;
@@ -51,14 +54,14 @@
   .subtitle{font-size:12px; color:var(--chalk-dim); font-style:italic; margin-top:2px;}
   .hdr-controls{display:flex; gap:8px; align-items:center; flex-wrap:wrap;}
   input[type=text], input[type=password], input[type=number], select{
-    font-family: 'Trebuchet MS', sans-serif;
+    font-family: 'Be Vietnam Pro', 'Segoe UI', Arial, sans-serif;
     background: var(--pitch-0); color: var(--chalk);
     border: 1px solid var(--line); border-radius: 6px;
     padding: 7px 9px; font-size: 13px;
   }
   input:focus, select:focus, button:focus{outline: 2px solid var(--gold-bright); outline-offset:1px;}
   button{
-    font-family:'Trebuchet MS', sans-serif; cursor:pointer;
+    font-family:'Be Vietnam Pro', 'Segoe UI', Arial, sans-serif; cursor:pointer;
     border:none; border-radius:6px; padding: 7px 12px; font-size:13px; font-weight:600;
     background: var(--gold); color: var(--pitch-0);
     transition: transform .08s ease, background .15s ease;
@@ -95,7 +98,7 @@
     margin-bottom: 16px;
   }
   .card h2{
-    font-family:'Futura','Trebuchet MS',sans-serif; text-transform:uppercase; letter-spacing:1.5px;
+    font-family:'Be Vietnam Pro','Segoe UI',Arial,sans-serif; text-transform:uppercase; letter-spacing:1.5px;
     font-size:14px; color:var(--gold-bright); margin: 0 0 12px; padding-bottom:8px;
     border-bottom: 1px dashed var(--line);
   }
@@ -166,6 +169,15 @@
   .row-remove{background:transparent; color:var(--chalk-dim); border:none; font-size:15px; padding:2px 6px;}
   .row-remove:hover{color:var(--red); background:transparent;}
 
+  .my-limit{font-size:12px; color:var(--gold-bright); margin: -8px 0 4px; font-weight:600;}
+  .stake-summary{display:flex; flex-wrap:wrap; gap:6px; margin-bottom:16px;}
+  .limit-chip{
+    font-size:11.5px; font-family:'Consolas','Menlo',monospace; padding:4px 9px;
+    background: var(--pitch-0); border:1px solid var(--line); border-radius:20px; color:var(--chalk);
+  }
+  .limit-chip.maxed{border-color:var(--red); color:var(--red);}
+  .limit-chip.quiet{color:var(--chalk-dim); font-family:'Be Vietnam Pro','Segoe UI',Arial,sans-serif;}
+
   ::-webkit-scrollbar{height:8px; width:8px;}
   ::-webkit-scrollbar-thumb{background:var(--pitch-0); border-radius:4px;}
 
@@ -207,6 +219,7 @@
 const TEAM_A_PLAYERS = ["Quyền","Sơn","Trung (1)","Hải","Trung (2)","Dũng","Quân","A. Trí","Tùng","Quyết"];
 const TEAM_B_PLAYERS = ["Khoa","Bảo","Tuấn","Tuấn Anh","Thế Anh","Cường","Việt","Bond","A. Tân"];
 const ADMIN_CODE = "123";
+const STAKE_LIMIT = 100;
 
 const MAIN_OU_LIMIT = 12.5;
 const ROUND_OU_LIMIT = 20.5;
@@ -263,6 +276,21 @@ async function loadAll(){
     return [stateKey, val];
   }));
   entries.forEach(([k,v])=>{ state[k]=v; });
+
+  // defensive normalization in case any saved value has a partial/unexpected shape
+  ['main','round1','round2','round3'].forEach(normalizeMatchData);
+  if(!state.players || typeof state.players!=='object' || !state.players.A || !state.players.B){
+    state.players = defaultPlayers();
+  } else {
+    const defP = defaultPlayers();
+    TEAM_A_PLAYERS.forEach(p=>{ if(typeof state.players.A[p]!=='number') state.players.A[p]=defP.A[p]; });
+    TEAM_B_PLAYERS.forEach(p=>{ if(typeof state.players.B[p]!=='number') state.players.B[p]=defP.B[p]; });
+  }
+  if(!state.penalty || typeof state.penalty!=='object' || typeof state.penalty.yes!=='number' || typeof state.penalty.no!=='number'){
+    state.penalty = {yes:3.50, no:1.25};
+  }
+  if(!Array.isArray(state.custom)) state.custom = [];
+  if(!Array.isArray(state.bets)) state.bets = [];
 }
 
 async function saveKey(stateKey){
@@ -288,14 +316,25 @@ function getName(){
   return n || "Anonymous";
 }
 
+function getUserTotalStake(name){
+  return state.bets.filter(b=>b.user===name).reduce((sum,b)=>sum+b.stake,0);
+}
+
 function placeBet(sectionLabel, description, odds, stakeInputEl){
   const stake = parseFloat(stakeInputEl.value);
   if(!stake || stake<=0){ showToast("Enter a stake first"); return; }
   if(!odds || odds<=0){ showToast("No odds set for this yet"); return; }
+  const name = getName();
+  const used = getUserTotalStake(name);
+  const remaining = STAKE_LIMIT - used;
+  if(stake > remaining){
+    showToast(`Stake limit reached — ${name} has ${fmt(remaining>0?remaining:0)} pt left of the ${STAKE_LIMIT} pt limit`);
+    return;
+  }
   const bet = {
     id: 'b'+Date.now()+Math.random().toString(16).slice(2),
     time: new Date().toLocaleString(),
-    user: getName(),
+    user: name,
     section: sectionLabel,
     description,
     odds,
@@ -305,12 +344,51 @@ function placeBet(sectionLabel, description, odds, stakeInputEl){
   state.bets.unshift(bet);
   saveKey('bets');
   stakeInputEl.value = '';
-  showToast(`Bet placed: ${description} for ${stake}`);
+  showToast(`Bet placed: ${description} for ${stake} pt`);
   renderBets();
+  renderStakeSummary();
+  updateMyLimitInfo();
+}
+
+function renderStakeSummary(){
+  const el = document.getElementById('stakeSummary');
+  if(!el) return;
+  const totals = {};
+  state.bets.forEach(b=>{ totals[b.user] = (totals[b.user]||0) + b.stake; });
+  const names = Object.keys(totals).sort();
+  if(names.length===0){
+    el.innerHTML = `<span class="limit-chip quiet">Stake limit: ${STAKE_LIMIT} pt per name — no bets placed yet.</span>`;
+    return;
+  }
+  el.innerHTML = names.map(n=>{
+    const used = totals[n];
+    const maxed = used>=STAKE_LIMIT;
+    return `<span class="limit-chip${maxed?' maxed':''}">${n}: ${fmt(used)} / ${STAKE_LIMIT} pt</span>`;
+  }).join('');
+}
+
+function updateMyLimitInfo(){
+  const el = document.getElementById('myLimitInfo');
+  if(!el) return;
+  const name = getName();
+  const used = getUserTotalStake(name);
+  const remaining = Math.max(0, STAKE_LIMIT-used);
+  el.textContent = `${name}: ${fmt(used)}/${STAKE_LIMIT} pt used (${fmt(remaining)} left)`;
 }
 
 /* ============================= RENDER: MATCH BLOCK (result + ou + cs) ============================= */
+function normalizeMatchData(sectionKey){
+  const def = defaultMatchOdds();
+  const data = state[sectionKey] && typeof state[sectionKey]==='object' ? state[sectionKey] : {};
+  if(!data.result || typeof data.result!=='object') data.result = def.result;
+  ['A','Draw','B'].forEach(k=>{ if(typeof data.result[k]!=='number' || isNaN(data.result[k])) data.result[k]=def.result[k]; });
+  if(!data.ou || typeof data.ou!=='object') data.ou = {};
+  if(!data.cs || typeof data.cs!=='object') data.cs = {};
+  state[sectionKey] = data;
+}
+
 function renderMatchBlock(containerEl, sectionKey, label, ouLimit){
+  normalizeMatchData(sectionKey);
   const data = state[sectionKey];
   containerEl.innerHTML = '';
 
@@ -338,7 +416,7 @@ function renderMatchBlock(containerEl, sectionKey, label, ouLimit){
     } else {
       const stakeWrap = document.createElement('div');
       stakeWrap.className='stake-group';
-      stakeWrap.innerHTML = `<span class="odd-value">${fmt(oddVal)}</span><input type="number" min="1" placeholder="Stake"><button>Bet</button>`;
+      stakeWrap.innerHTML = `<span class="odd-value">${fmt(oddVal)}</span><input type="number" min="1" max="100" placeholder="Stake"><button>Bet</button>`;
       const stakeInp = stakeWrap.querySelector('input');
       const btn = stakeWrap.querySelector('button');
       btn.addEventListener('click', ()=>placeBet(label, lbl, oddVal, stakeInp));
@@ -378,7 +456,7 @@ function renderMatchBlock(containerEl, sectionKey, label, ouLimit){
           showToast('Odds updated');
         });
       } else {
-        td.innerHTML = `<div class="stake-group"><span class="odd-value">${fmt(entry[side])}</span><input type="number" min="1" placeholder="Stake"><button>Bet</button></div>`;
+        td.innerHTML = `<div class="stake-group"><span class="odd-value">${fmt(entry[side])}</span><input type="number" min="1" max="100" placeholder="Stake"><button>Bet</button></div>`;
         const stakeInp = td.querySelector('input');
         const btn = td.querySelector('button');
         btn.addEventListener('click', ()=>placeBet(label, `${side==='over'?'Over':'Under'} ${line} goals`, entry[side], stakeInp));
@@ -407,14 +485,19 @@ function renderMatchBlock(containerEl, sectionKey, label, ouLimit){
   const wrapB = document.createElement('div'); wrapB.innerHTML=`<label>Team B goals</label>`; wrapB.appendChild(selB);
   picker.appendChild(wrapA); picker.appendChild(wrapB);
 
+  // Use direct element references throughout instead of getElementById — nodes here
+  // are still detached from the document while being built, so id-based lookups
+  // are unreliable until the whole card is appended.
   const actionWrap = document.createElement('div');
+  let csOddInput = null, csBetOddSpan = null;
+
   if(isAdmin){
-    actionWrap.innerHTML = `<label>Odds</label><input class="odd-edit" type="number" step="0.01" min="1" value="6.00" id="csOddInput_${sectionKey}"><button style="margin-left:6px;">Set odds</button>`;
+    actionWrap.innerHTML = `<label>Odds</label><input class="odd-edit" type="number" step="0.01" min="1" value="6.00"><button style="margin-left:6px;">Set odds</button>`;
+    csOddInput = actionWrap.querySelector('input');
     const setBtn = actionWrap.querySelector('button');
     setBtn.addEventListener('click', ()=>{
-      const oddInp = actionWrap.querySelector('input');
       const key = `${selA.value}-${selB.value}`;
-      const v = parseFloat(oddInp.value);
+      const v = parseFloat(csOddInput.value);
       if(!v || v<=0){ showToast('Enter a valid odd'); return; }
       data.cs[key] = v;
       saveKey(sectionKey);
@@ -422,50 +505,40 @@ function renderMatchBlock(containerEl, sectionKey, label, ouLimit){
       renderCsChips();
     });
   } else {
-    actionWrap.innerHTML = `<label>&nbsp;</label><div class="stake-group" id="csBetWrap_${sectionKey}"><span class="odd-value empty">select score</span><input type="number" min="1" placeholder="Stake"><button>Bet</button></div>`;
+    actionWrap.innerHTML = `<label>&nbsp;</label><div class="stake-group"><span class="odd-value empty">select score</span><input type="number" min="1" max="${STAKE_LIMIT}" placeholder="Stake"><button>Bet</button></div>`;
+    const stakeGroup = actionWrap.querySelector('.stake-group');
+    csBetOddSpan = stakeGroup.querySelector('.odd-value');
+    const csBetStakeInp = stakeGroup.querySelector('input');
+    const betBtn = stakeGroup.querySelector('button');
     function refreshCsOdd(){
       const key = `${selA.value}-${selB.value}`;
-      const wrap = document.getElementById(`csBetWrap_${sectionKey}`);
-      const oddSpan = wrap.querySelector('.odd-value');
       const odd = data.cs[key];
-      if(odd){ oddSpan.textContent = fmt(odd); oddSpan.classList.remove('empty'); }
-      else { oddSpan.textContent='not set'; oddSpan.classList.add('empty'); }
+      if(odd){ csBetOddSpan.textContent = fmt(odd); csBetOddSpan.classList.remove('empty'); }
+      else { csBetOddSpan.textContent='not set'; csBetOddSpan.classList.add('empty'); }
     }
     selA.addEventListener('change', refreshCsOdd);
     selB.addEventListener('change', refreshCsOdd);
-    setTimeout(refreshCsOdd, 0);
-    actionWrap.querySelector('button')?.addEventListener('click', function(){}); // placeholder in case order shifts
+    refreshCsOdd();
+    betBtn.addEventListener('click', ()=>{
+      const key = `${selA.value}-${selB.value}`;
+      const odd = data.cs[key];
+      placeBet(label, `Correct score ${selA.value}:${selB.value}`, odd, csBetStakeInp);
+    });
   }
   picker.appendChild(actionWrap);
   csCard.appendChild(picker);
 
-  if(!isAdmin){
-    // wire bet button (needs to be after DOM insertion so query works)
-    setTimeout(()=>{
-      const wrap = document.getElementById(`csBetWrap_${sectionKey}`);
-      const btn = wrap.querySelector('button');
-      const stakeInp = wrap.querySelector('input');
-      btn.onclick = ()=>{
-        const key = `${selA.value}-${selB.value}`;
-        const odd = data.cs[key];
-        placeBet(label, `Correct score ${selA.value}:${selB.value}`, odd, stakeInp);
-      };
-    },0);
-  }
-
   const chipWrap = document.createElement('div');
   chipWrap.className='cs-chip-wrap';
-  chipWrap.id = `csChips_${sectionKey}`;
   csCard.appendChild(chipWrap);
 
   function renderCsChips(){
-    const wrap = document.getElementById(`csChips_${sectionKey}`);
     const keys = Object.keys(data.cs);
     if(keys.length===0){
-      wrap.innerHTML = `<span class="empty-note">No correct-score odds set yet.</span>`;
+      chipWrap.innerHTML = `<span class="empty-note">No correct-score odds set yet.</span>`;
       return;
     }
-    wrap.innerHTML='';
+    chipWrap.innerHTML='';
     keys.sort((x,y)=>{
       const [xa,xb]=x.split('-').map(Number), [ya,yb]=y.split('-').map(Number);
       return (xa+xb)-(ya+yb) || xa-ya;
@@ -477,16 +550,14 @@ function renderMatchBlock(containerEl, sectionKey, label, ouLimit){
       chip.title = isAdmin ? 'Click to load into editor' : 'Click to select this score';
       chip.addEventListener('click', ()=>{
         selA.value=a; selB.value=b;
-        if(!isAdmin){
-          const wrap2 = document.getElementById(`csBetWrap_${sectionKey}`);
-          const oddSpan = wrap2.querySelector('.odd-value');
-          oddSpan.textContent = fmt(data.cs[k]); oddSpan.classList.remove('empty');
-        } else {
-          const oddInp = document.getElementById(`csOddInput_${sectionKey}`);
-          oddInp.value = fmt(data.cs[k]);
+        if(isAdmin){
+          if(csOddInput) csOddInput.value = fmt(data.cs[k]);
+        } else if(csBetOddSpan){
+          csBetOddSpan.textContent = fmt(data.cs[k]);
+          csBetOddSpan.classList.remove('empty');
         }
       });
-      wrap.appendChild(chip);
+      chipWrap.appendChild(chip);
     });
   }
   renderCsChips();
@@ -498,7 +569,7 @@ function renderPlayers(containerEl){
   containerEl.innerHTML = '';
   const card = document.createElement('div');
   card.className='card';
-  card.innerHTML = `<h2>Player to Score</h2><div class="hint">Anytime goalscorer odds for each player, across all rounds.</div>`;
+  card.innerHTML = `<h2>Player to Score</h2><div class="hint">Anytime goalscorer odds for each player, across all rounds.${isAdmin?' Rename, re-price, add, or remove a player below.':''}</div>`;
   const cols = document.createElement('div');
   cols.className='players-cols';
 
@@ -510,24 +581,66 @@ function renderPlayers(containerEl){
       const odd = state.players[teamKey][name];
       const row = document.createElement('div');
       row.className='odd-row';
-      row.innerHTML = `<span class="odd-label">${name}</span>`;
       if(isAdmin){
-        row.innerHTML += `<input class="odd-edit" type="number" step="0.01" min="1" value="${fmt(odd)}">`;
-        const inp = row.querySelector('input');
-        inp.addEventListener('change', ()=>{
-          state.players[teamKey][name] = parseFloat(inp.value)||odd;
+        row.innerHTML = `<input class="odd-edit player-name-edit" type="text" value="${name}" style="width:120px; text-align:left;">
+          <input class="odd-edit" type="number" step="0.01" min="1" value="${fmt(odd)}">
+          <button class="row-remove" title="Remove player">✕</button>`;
+        const nameInp = row.querySelector('.player-name-edit');
+        const oddInp = row.querySelectorAll('input')[1];
+        nameInp.addEventListener('change', ()=>{
+          const newName = nameInp.value.trim();
+          if(!newName){ nameInp.value=name; return; }
+          if(newName===name) return;
+          if(state.players[teamKey][newName]!==undefined){ showToast('That name already exists'); nameInp.value=name; return; }
+          const val = state.players[teamKey][name];
+          delete state.players[teamKey][name];
+          state.players[teamKey][newName] = val;
+          saveKey('players');
+          showToast('Player renamed');
+          renderPlayers(containerEl);
+        });
+        oddInp.addEventListener('change', ()=>{
+          state.players[teamKey][name] = parseFloat(oddInp.value)||odd;
           saveKey('players');
           showToast('Odds updated');
         });
+        row.querySelector('.row-remove').addEventListener('click', ()=>{
+          delete state.players[teamKey][name];
+          saveKey('players');
+          showToast('Player removed');
+          renderPlayers(containerEl);
+        });
       } else {
+        row.innerHTML = `<span class="odd-label">${name}</span>`;
         const g = document.createElement('div');
         g.className='stake-group';
-        g.innerHTML = `<span class="odd-value">${fmt(odd)}</span><input type="number" min="1" placeholder="Stake"><button>Bet</button>`;
+        g.innerHTML = `<span class="odd-value">${fmt(odd)}</span><input type="number" min="1" max="${STAKE_LIMIT}" placeholder="Stake"><button>Bet</button>`;
         g.querySelector('button').addEventListener('click', ()=>placeBet('Player to Score', `${name} (${teamLabel}) to score`, odd, g.querySelector('input')));
         row.appendChild(g);
       }
       col.appendChild(row);
     });
+    if(isAdmin){
+      const addRow = document.createElement('div');
+      addRow.className='custom-add';
+      addRow.style.marginTop='10px';
+      addRow.innerHTML = `<input type="text" placeholder="New player name" style="flex:1 1 120px;">
+        <input class="odd-edit" type="number" step="0.01" min="1" value="5.00" style="width:66px;">
+        <button>Add player</button>`;
+      const nameEl = addRow.querySelector('input[type=text]');
+      const oddEl = addRow.querySelector('input[type=number]');
+      addRow.querySelector('button').addEventListener('click', ()=>{
+        const nm = nameEl.value.trim();
+        const od = parseFloat(oddEl.value);
+        if(!nm){ showToast('Enter a player name'); return; }
+        if(state.players[teamKey][nm]!==undefined){ showToast('That player already exists'); return; }
+        state.players[teamKey][nm] = od>0?od:5.00;
+        saveKey('players');
+        showToast('Player added');
+        renderPlayers(containerEl);
+      });
+      col.appendChild(addRow);
+    }
     return col;
   }
   cols.appendChild(buildCol('A','Team A','a'));
@@ -560,7 +673,7 @@ function renderPenalty(containerEl){
     } else {
       const g = document.createElement('div');
       g.className='stake-group';
-      g.innerHTML = `<span class="odd-value">${fmt(odd)}</span><input type="number" min="1" placeholder="Stake"><button>Bet</button>`;
+      g.innerHTML = `<span class="odd-value">${fmt(odd)}</span><input type="number" min="1" max="100" placeholder="Stake"><button>Bet</button>`;
       g.querySelector('button').addEventListener('click', ()=>placeBet('Penalty', lbl, odd, g.querySelector('input')));
       cell.appendChild(g);
     }
@@ -626,7 +739,7 @@ function renderCustom(containerEl){
       } else {
         const g = document.createElement('div');
         g.className='stake-group';
-        g.innerHTML = `<span class="odd-value">${fmt(item.odd)}</span><input type="number" min="1" placeholder="Stake"><button>Bet</button>`;
+        g.innerHTML = `<span class="odd-value">${fmt(item.odd)}</span><input type="number" min="1" max="100" placeholder="Stake"><button>Bet</button>`;
         g.querySelector('button').addEventListener('click', ()=>placeBet('Custom', item.name, item.odd, g.querySelector('input')));
         row.appendChild(g);
       }
@@ -643,28 +756,38 @@ function renderBets(){
   containerEl.innerHTML='';
   const card = document.createElement('div');
   card.className='card';
-  card.innerHTML = `<h2>Bet History</h2><div class="hint">Every bet placed by everyone, newest first.</div>`;
+  card.innerHTML = `<h2>Bet History</h2><div class="hint">${isAdmin?'Every bet placed by everyone, newest first.':'Every bet placed, newest first — names and stakes stay private. You can delete your own bets below.'}</div>`;
   if(state.bets.length===0){
     card.innerHTML += `<div class="empty-note">No bets placed yet — go find some odds.</div>`;
   } else {
+    const myName = getName().trim().toLowerCase();
     const table = document.createElement('table');
     table.className='bets';
-    table.innerHTML = `<thead><tr><th>Time</th><th>Bettor</th><th>Section</th><th>Pick</th><th>Odds</th><th>Stake</th><th>Potential win</th>${isAdmin?'<th></th>':''}</tr></thead>`;
+    table.innerHTML = isAdmin
+      ? `<thead><tr><th>Time</th><th>Bettor</th><th>Section</th><th>Pick</th><th>Odds</th><th>Stake</th><th>Potential win</th><th></th></tr></thead>`
+      : `<thead><tr><th>Time</th><th>Section</th><th>Pick</th><th>Odds</th><th>Potential win</th><th></th></tr></thead>`;
     const tbody = document.createElement('tbody');
     state.bets.forEach(b=>{
       const tr = document.createElement('tr');
-      tr.innerHTML = `<td>${b.time}</td><td>${b.user}</td><td>${b.section}</td><td>${b.description}</td><td>${fmt(b.odds)}</td><td>${fmt(b.stake)}</td><td>${fmt(b.potential)}</td>`;
-      if(isAdmin){
+      tr.innerHTML = isAdmin
+        ? `<td>${b.time}</td><td>${b.user}</td><td>${b.section}</td><td>${b.description}</td><td>${fmt(b.odds)}</td><td>${fmt(b.stake)}</td><td>${fmt(b.potential)}</td>`
+        : `<td>${b.time}</td><td>${b.section}</td><td>${b.description}</td><td>${fmt(b.odds)}</td><td>${fmt(b.potential)}</td>`;
+      const isMine = b.user.trim().toLowerCase() === myName;
+      if(isAdmin || isMine){
         const td = document.createElement('td');
         const rm = document.createElement('button');
-        rm.className='row-remove'; rm.textContent='✕'; rm.title='Delete bet';
+        rm.className='row-remove'; rm.textContent='✕'; rm.title = isAdmin ? 'Delete bet' : 'Delete your bet';
         rm.addEventListener('click', ()=>{
           state.bets = state.bets.filter(x=>x.id!==b.id);
           saveKey('bets');
           renderBets();
+          renderStakeSummary();
+          updateMyLimitInfo();
         });
         td.appendChild(rm);
         tr.appendChild(td);
+      } else {
+        tr.appendChild(document.createElement('td'));
       }
       tbody.appendChild(tr);
     });
@@ -710,15 +833,27 @@ function switchTab(id){
   document.querySelectorAll('section.panel').forEach(p=>p.classList.toggle('active', p.id==='panel-'+id));
 }
 
+function safeRender(fn, containerEl, label){
+  try{
+    fn();
+  }catch(e){
+    console.error(`Render error in ${label}:`, e);
+    if(containerEl){
+      containerEl.innerHTML = `<div class="card"><h2>${label}</h2>
+        <div class="empty-note">Something went wrong loading this tab. Try refreshing the page — if it keeps happening, an admin may need to reset this section's odds.</div></div>`;
+    }
+  }
+}
+
 function renderAll(){
-  renderMatchBlock(document.getElementById('panel-main'), 'main', 'Main Match', MAIN_OU_LIMIT);
-  renderMatchBlock(document.getElementById('panel-round1'), 'round1', 'Round 1', ROUND_OU_LIMIT);
-  renderMatchBlock(document.getElementById('panel-round2'), 'round2', 'Round 2', ROUND_OU_LIMIT);
-  renderMatchBlock(document.getElementById('panel-round3'), 'round3', 'Round 3', ROUND_OU_LIMIT);
-  renderPlayers(document.getElementById('panel-players'));
-  renderPenalty(document.getElementById('panel-penalty'));
-  renderCustom(document.getElementById('panel-custom'));
-  renderBets();
+  safeRender(()=>renderMatchBlock(document.getElementById('panel-main'), 'main', 'Main Match', MAIN_OU_LIMIT), document.getElementById('panel-main'), 'Main Match');
+  safeRender(()=>renderMatchBlock(document.getElementById('panel-round1'), 'round1', 'Round 1', ROUND_OU_LIMIT), document.getElementById('panel-round1'), 'Round 1');
+  safeRender(()=>renderMatchBlock(document.getElementById('panel-round2'), 'round2', 'Round 2', ROUND_OU_LIMIT), document.getElementById('panel-round2'), 'Round 2');
+  safeRender(()=>renderMatchBlock(document.getElementById('panel-round3'), 'round3', 'Round 3', ROUND_OU_LIMIT), document.getElementById('panel-round3'), 'Round 3');
+  safeRender(()=>renderPlayers(document.getElementById('panel-players')), document.getElementById('panel-players'), 'Player to Score');
+  safeRender(()=>renderPenalty(document.getElementById('panel-penalty')), document.getElementById('panel-penalty'), 'Penalty');
+  safeRender(()=>renderCustom(document.getElementById('panel-custom')), document.getElementById('panel-custom'), 'Custom Bets');
+  safeRender(()=>renderBets(), document.getElementById('panel-bets'), 'Bet History');
 }
 
 /* ============================= LOGIN ============================= */
@@ -754,11 +889,15 @@ document.getElementById('adminCode').addEventListener('keydown', (e)=>{
 });
 
 /* ============================= INIT ============================= */
+document.getElementById('nameInput').addEventListener('input', ()=>{ updateMyLimitInfo(); renderBets(); });
+
 async function init(){
   buildTabsAndPanels();
   updateModeUI();
   await loadAll();
   renderAll();
+  renderStakeSummary();
+  updateMyLimitInfo();
 }
 init();
 </script>
