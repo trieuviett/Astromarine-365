@@ -1,0 +1,824 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Matchday Odds Board</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --pitch:#0F3D2E; --pitch-2:#123F2C; --line: rgba(245,241,230,0.09);
+    --chalk:#F5F1E6; --chalk-dim:#DEDACB; --ink:#12241A; --ink-soft:#3E5449;
+    --gold:#D4A73D; --gold-ink:#5B4310; --card:#FBF9F3;
+    --win:#1F6B2E; --lose:#A32D2D;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;}
+  #app{
+    font-family:'Inter',sans-serif;
+    background: repeating-linear-gradient(90deg, var(--line) 0px, var(--line) 1px, transparent 1px, transparent 64px),
+      linear-gradient(180deg, var(--pitch), var(--pitch-2));
+    color: var(--chalk); padding: 24px 16px 36px; border-radius: 16px; min-height:200px;
+  }
+  .wrap{ max-width:680px; margin:0 auto; }
+  .eyebrow{ font-family:'Space Mono',monospace; font-size:11px; letter-spacing:.16em; text-transform:uppercase; color:var(--gold); text-align:center; margin:0 0 4px; }
+  h1.title{ font-family:'Anton',sans-serif; font-weight:400; text-transform:uppercase; text-align:center; font-size:clamp(22px,5.6vw,34px); margin:0 0 16px; line-height:1.05; }
+  .topbar{ display:flex; gap:8px; justify-content:center; align-items:center; margin-bottom:18px; flex-wrap:wrap; }
+  .pin-input{ width:90px; padding:7px 9px; border-radius:8px; border:1.5px solid #DCD7C8; font-size:13px; font-family:'Space Mono',monospace; }
+  .btn{ font-family:'Inter',sans-serif; font-weight:700; font-size:13px; border:none; border-radius:8px; padding:9px 14px; cursor:pointer; }
+  .btn-primary{ background:var(--gold); color:var(--gold-ink); }
+  .btn-ghost{ background:transparent; color:var(--chalk-dim); border:1px solid rgba(245,241,230,0.3); }
+  .btn-ghost:hover{ background:rgba(245,241,230,0.08); }
+  .btn-small{ padding:6px 10px; font-size:12px; }
+  .admin-badge{ font-family:'Space Mono',monospace; font-size:11px; background:var(--gold); color:var(--gold-ink); padding:6px 10px; border-radius:999px; font-weight:700; }
+
+  .setup-card{ background:var(--card); color:var(--ink); border-radius:14px; padding:20px; box-shadow:0 10px 30px rgba(0,0,0,0.25); }
+  .setup-card h2{ font-family:'Anton',sans-serif; font-weight:400; text-transform:uppercase; font-size:19px; margin:0 0 4px; }
+  .setup-sub{ font-size:12px; color:var(--ink-soft); margin:0 0 16px; }
+  .field{ margin-bottom:12px; }
+  .field label{ display:block; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-soft); margin-bottom:5px; }
+  .field input[type=text], .field textarea{ width:100%; padding:9px 10px; border-radius:8px; border:1.5px solid #DCD7C8; font-family:'Inter',sans-serif; font-size:14px; font-weight:500; color:var(--ink); }
+  .field textarea{ resize:vertical; min-height:52px; font-size:13px; }
+  .field-row{ display:flex; gap:10px; }
+  .field-row .field{ flex:1; }
+
+  .tabs{ display:flex; gap:4px; background:rgba(0,0,0,0.22); border-radius:999px; padding:4px; margin-bottom:16px; overflow-x:auto; }
+  .tab-btn{ flex:1; white-space:nowrap; border:none; background:transparent; color:var(--chalk-dim); font-weight:600; font-size:12px; padding:8px 8px; border-radius:999px; cursor:pointer; }
+  .tab-btn.active{ background:var(--gold); color:var(--gold-ink); }
+  .subtabs{ display:flex; gap:6px; margin-bottom:14px; }
+  .subtab-btn{ border:1px solid rgba(245,241,230,0.3); background:transparent; color:var(--chalk-dim); font-weight:600; font-size:12px; padding:7px 12px; border-radius:8px; cursor:pointer; }
+  .subtab-btn.active{ background:var(--gold); color:var(--gold-ink); border-color:var(--gold); }
+
+  .panel{ background:var(--card); color:var(--ink); border-radius:14px; padding:18px; box-shadow:0 10px 30px rgba(0,0,0,0.2); margin-bottom:14px; }
+  .panel h3{ font-family:'Anton',sans-serif; font-weight:400; text-transform:uppercase; font-size:15px; margin:0 0 10px; }
+  .panel h4{ font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--ink-soft); margin:16px 0 8px; }
+  .panel h4:first-of-type{ margin-top:0; }
+
+  .score-entry{ display:flex; align-items:center; gap:10px; background:#F1EDE0; border-radius:10px; padding:10px 12px; margin-bottom:14px; flex-wrap:wrap; }
+  .score-entry input[type=number]{ width:52px; padding:6px; border-radius:6px; border:1.5px solid #DCD7C8; font-family:'Space Mono',monospace; font-weight:700; text-align:center; }
+  .score-entry .lbl{ font-size:12px; font-weight:700; color:var(--ink-soft); }
+  .final-tag{ font-family:'Space Mono',monospace; font-size:12px; color:var(--win); font-weight:700; }
+
+  .sel-row{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding:8px 4px; border-bottom:1px solid #ECE7D9; }
+  .sel-row:last-child{ border-bottom:none; }
+  .sel-label{ font-size:13px; font-weight:600; flex:1; min-width:0; }
+  .odds-input{ width:64px; padding:6px 7px; border-radius:6px; border:1.5px solid #DCD7C8; font-family:'Space Mono',monospace; font-weight:700; text-align:center; font-size:13px; }
+  .odds-chip{ font-family:'Space Mono',monospace; font-weight:700; font-size:13px; background:var(--pitch); color:var(--gold); padding:6px 12px; border-radius:7px; border:none; cursor:pointer; }
+  .odds-chip:hover{ filter:brightness(1.15); }
+  .odds-chip[disabled]{ background:#E4E0D2; color:#9A9585; cursor:not-allowed; }
+  .win-tag{ font-size:11px; font-weight:700; color:var(--win); background:#E9F5E9; padding:4px 8px; border-radius:6px; }
+
+  .ou-scroll{ max-height:280px; overflow-y:auto; border:1px solid #ECE7D9; border-radius:8px; padding:2px 8px; }
+  .cs-list{ display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px; }
+  .cs-chip{ display:flex; align-items:center; gap:6px; background:#F1EDE0; border-radius:7px; padding:6px 10px; font-size:12px; font-family:'Space Mono',monospace; font-weight:700; }
+  .add-form{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:6px; }
+  .add-form input[type=number]{ width:48px; padding:6px; border-radius:6px; border:1.5px solid #DCD7C8; text-align:center; font-family:'Space Mono',monospace; }
+  .add-form input[type=text]{ flex:1; min-width:100px; padding:7px 9px; border-radius:6px; border:1.5px solid #DCD7C8; font-size:13px; }
+
+  .bet-inline{ background:#F1EDE0; border-radius:8px; padding:10px; margin:6px 0; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .bet-inline input{ padding:7px 9px; border-radius:6px; border:1.5px solid #DCD7C8; font-size:13px; }
+  .bet-inline input[name=stake]{ width:80px; font-family:'Space Mono',monospace; font-weight:700; }
+  .bet-inline .ret{ font-size:12px; color:var(--ink-soft); font-family:'Space Mono',monospace; }
+
+  .settle-check{ display:flex; align-items:center; gap:6px; font-size:12px; }
+  .name-input{ width:100%; padding:9px 10px; border-radius:8px; border:1.5px solid #DCD7C8; font-size:14px; font-weight:600; margin-bottom:10px; }
+  .wager-row{ display:flex; justify-content:space-between; align-items:center; padding:8px 2px; border-bottom:1px solid #ECE7D9; font-size:12px; gap:8px;}
+  .wager-row:last-child{ border-bottom:none; }
+  .wager-status{ font-weight:700; padding:3px 8px; border-radius:6px; font-size:10px; text-transform:uppercase; }
+  .st-pending{ background:#FCF2DC; color:var(--gold-ink); }
+  .st-won{ background:#E9F5E9; color:var(--win); }
+  .st-lost{ background:#FBEAEA; color:var(--lose); }
+  .board-row{ display:grid; grid-template-columns:26px 1fr auto; gap:8px; align-items:center; padding:8px 2px; border-bottom:1px solid #ECE7D9; }
+  .board-row:last-child{ border-bottom:none; }
+  .pos{ font-family:'Space Mono',monospace; font-weight:700; color:var(--ink-soft); }
+  .pos.gold{ color:var(--gold-ink); }
+  .board-pts{ font-family:'Space Mono',monospace; font-weight:700; }
+  .empty-note{ text-align:center; color:var(--ink-soft); font-size:13px; padding:14px 4px; }
+  .disclaimer{ text-align:center; font-size:11px; color:var(--chalk-dim); opacity:.75; margin-top:14px; line-height:1.5; }
+  .footer-row{ display:flex; justify-content:center; gap:10px; margin-top:8px; }
+  .status-msg{ text-align:center; font-size:13px; color:var(--chalk-dim); padding:26px 8px; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="wrap">
+    <p class="eyebrow">Friendly wager board · points only, no real money</p>
+    <h1 class="title" id="pageTitle">Matchday Odds Board</h1>
+    <div id="topbar"></div>
+    <div id="content"><div class="status-msg">Loading the board…</div></div>
+  </div>
+</div>
+
+<script>
+(function(){
+  var SETUP_KEY = 'bet:setup';
+  var ACT_KEY = 'bet:activity';
+  var state = { setup:null, activity:{balances:{},wagers:{}}, tab:'odds', roundSub:1, isAdmin:false, userName:'', openBet:null, editingSel:null, editingTeams:false };
+
+  function el(h){ var d=document.createElement('div'); d.innerHTML=h.trim(); return d.firstChild; }
+  function esc(s){ return String(s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+  function fmtOdds(o){ return (o===null||o===undefined||isNaN(o)) ? null : Number(o).toFixed(2); }
+
+  async function loadAll(){
+    try{ var r; try{ r = await window.storage.get(SETUP_KEY,true); }catch(e){ r=null; } state.setup = r? JSON.parse(r.value): null; }
+    catch(e){ state.setup=null; }
+    try{ var r2; try{ r2 = await window.storage.get(ACT_KEY,true); }catch(e){ r2=null; } state.activity = r2? JSON.parse(r2.value): {balances:{},wagers:{}}; }
+    catch(e){ state.activity={balances:{},wagers:{}}; }
+    render();
+  }
+  async function saveSetup(){ try{ await window.storage.set(SETUP_KEY, JSON.stringify(state.setup), true); }catch(e){ console.error(e); } }
+  async function saveActivity(){ try{ await window.storage.set(ACT_KEY, JSON.stringify(state.activity), true); }catch(e){ console.error(e); } }
+
+  function scopes(){
+    return [
+      {key:'overall', label:'Overall match'},
+      {key:'round1', label:'Round 1'},
+      {key:'round2', label:'Round 2'},
+      {key:'round3', label:'Round 3'}
+    ];
+  }
+
+  function buildMarkets(teamA, teamB, playersA, playersB){
+    var m = {};
+    scopes().forEach(function(sc){
+      m[sc.key+'_result'] = { id:sc.key+'_result', scope:sc.key, type:'result', label:'Match result',
+        selections:[{id:'A',label:teamA+' win',odds:null},{id:'D',label:'Draw',odds:null},{id:'B',label:teamB+' win',odds:null}],
+        settled:false, winners:[] };
+      m[sc.key+'_cs'] = { id:sc.key+'_cs', scope:sc.key, type:'correctscore', label:'Correct score', selections:[], settled:false, winners:[] };
+      for(var i=0;i<=20;i++){
+        var line = i+0.5;
+        var id = sc.key+'_ou_'+line;
+        m[id] = { id:id, scope:sc.key, type:'overunder', line:line, label:'Total goals '+line,
+          selections:[{id:'O',label:'Over '+line,odds:null},{id:'U',label:'Under '+line,odds:null}], settled:false, winners:[] };
+      }
+    });
+    m['scorer_A'] = { id:'scorer_A', type:'scorer', team:'A', label:teamA+' — anytime scorer',
+      selections: playersA.map(function(p,i){ return {id:'a'+i,label:p,odds:null}; }), settled:false, winners:[] };
+    m['scorer_B'] = { id:'scorer_B', type:'scorer', team:'B', label:teamB+' — anytime scorer',
+      selections: playersB.map(function(p,i){ return {id:'b'+i,label:p,odds:null}; }), settled:false, winners:[] };
+    m['penalty'] = { id:'penalty', type:'penalty', label:'Penalty markets',
+      selections:[{id:'p1',label:'Penalty awarded in match',odds:null},{id:'p2',label:'No penalty awarded',odds:null}],
+      settled:false, winners:[] };
+    return m;
+  }
+
+  function parseNames(text){
+    return text.split(/[\n,]/).map(function(s){ return s.trim(); }).filter(Boolean);
+  }
+
+  function renameTeams(newA, newB){
+    var m = state.setup.markets;
+    scopes().forEach(function(sc){
+      var r = m[sc.key+'_result'];
+      r.selections.forEach(function(s){
+        if(s.id==='A') s.label = newA+' win';
+        if(s.id==='B') s.label = newB+' win';
+      });
+    });
+    m['scorer_A'].label = newA+' — anytime scorer';
+    m['scorer_B'].label = newB+' — anytime scorer';
+    state.setup.teamA = newA;
+    state.setup.teamB = newB;
+  }
+
+  function render(){
+    document.getElementById('pageTitle').textContent = state.setup ? (state.setup.teamA+' vs '+state.setup.teamB) : 'Matchday Odds Board';
+    document.getElementById('topbar').innerHTML='';
+    document.getElementById('topbar').appendChild(renderTopbar());
+    var content = document.getElementById('content');
+    content.innerHTML='';
+    if(!state.setup){ content.appendChild(renderSetup()); return; }
+    if(state.isAdmin){ content.appendChild(renderTeamSettings()); }
+    content.appendChild(renderTabs());
+    content.appendChild(renderActiveTab());
+    var disc = el('<p class="disclaimer">Bragging-rights points only. Nothing on this board is real money or a licensed bet — settle it however your group agrees.</p>');
+    content.appendChild(disc);
+  }
+
+  function renderTopbar(){
+    var bar = el('<div class="topbar"></div>');
+    if(!state.setup){ return bar; }
+    if(state.isAdmin){
+      var badge = el('<span class="admin-badge">Admin mode</span>');
+      bar.appendChild(badge);
+      var logout = el('<button class="btn btn-ghost btn-small">Exit admin</button>');
+      logout.addEventListener('click', function(){ state.isAdmin=false; render(); });
+      bar.appendChild(logout);
+      var resetBtn = el('<button class="btn btn-ghost btn-small">New event</button>');
+      resetBtn.addEventListener('click', function(){
+        if(confirm('This wipes the event, all odds and all bets. Continue?')){
+          state.activity = {balances:{},wagers:{}};
+          saveActivity();
+          state.setup = null;
+          saveSetup().then(render);
+        }
+      });
+      bar.appendChild(resetBtn);
+    } else {
+      var pin = el('<input class="pin-input" type="text" inputmode="numeric" placeholder="Admin PIN">');
+      var unlock = el('<button class="btn btn-ghost btn-small">Unlock admin</button>');
+      unlock.addEventListener('click', function(){
+        if(pin.value === state.setup.pin){ state.isAdmin=true; render(); }
+        else alert('Wrong PIN.');
+      });
+      bar.appendChild(pin); bar.appendChild(unlock);
+    }
+    return bar;
+  }
+
+  function renderSetup(){
+    var card = el('<div class="setup-card"></div>');
+    card.innerHTML =
+      '<h2>Set up the event</h2>'
+      + '<p class="setup-sub">Name the two sides, set an admin PIN to control odds and settle results, then open the board. Rosters are prefilled — edit as needed.</p>'
+      + '<div class="field-row">'
+      + '  <div class="field"><label>Team A</label><input type="text" id="in-a" placeholder="Team A" maxlength="24"></div>'
+      + '  <div class="field"><label>Team B</label><input type="text" id="in-b" placeholder="Team B" maxlength="24"></div>'
+      + '</div>'
+      + '<div class="field"><label>Team A players</label><textarea id="in-pa"></textarea></div>'
+      + '<div class="field"><label>Team B players</label><textarea id="in-pb"></textarea></div>'
+      + '<div class="field"><label>Admin PIN</label><input type="text" id="in-pin" placeholder="e.g. 2580" maxlength="8"></div>'
+      + '<button class="btn btn-primary" id="btn-create" style="width:100%;">Open the board</button>';
+    card.querySelector('#in-pa').value = 'Quyền, Sơn, Trung, a Hải, a Trung, a Dũng, a Quân, a Trí, Tùng, Quyết';
+    card.querySelector('#in-pb').value = 'Khoa, Bảo, a Tuấn, a Tuấn Anh, a Thế Anh, a Cường, Việt, Bond, a Tân';
+    card.querySelector('#btn-create').addEventListener('click', function(){
+      var a = card.querySelector('#in-a').value.trim() || 'Team A';
+      var b = card.querySelector('#in-b').value.trim() || 'Team B';
+      var pin = card.querySelector('#in-pin').value.trim();
+      if(!pin){ alert('Set an admin PIN so odds can be locked down.'); return; }
+      var pa = parseNames(card.querySelector('#in-pa').value);
+      var pb = parseNames(card.querySelector('#in-pb').value);
+      var setup = {
+        teamA:a, teamB:b, pin:pin, playersA:pa, playersB:pb,
+        scores:{}, markets: buildMarkets(a,b,pa,pb), customMarkets:[]
+      };
+      state.setup = setup;
+      state.isAdmin = true;
+      saveSetup().then(render);
+    });
+    return card;
+  }
+
+  function renderTeamSettings(){
+    var wrap = el('<div class="panel" style="padding:12px 18px;"></div>');
+    if(!state.editingTeams){
+      var row = el('<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;"></div>');
+      row.appendChild(el('<span style="font-size:12px;color:var(--ink-soft);">Teams: <strong style="color:var(--ink);">'+esc(state.setup.teamA)+'</strong> vs <strong style="color:var(--ink);">'+esc(state.setup.teamB)+'</strong></span>'));
+      var editBtn = el('<button class="btn btn-ghost btn-small">Edit team names</button>');
+      editBtn.addEventListener('click', function(){ state.editingTeams = true; render(); });
+      row.appendChild(editBtn);
+      wrap.appendChild(row);
+    } else {
+      var form = el('<div class="add-form"></div>');
+      var aIn = el('<input type="text" style="flex:1;min-width:100px;">'); aIn.value = state.setup.teamA;
+      var bIn = el('<input type="text" style="flex:1;min-width:100px;">'); bIn.value = state.setup.teamB;
+      var saveBtn = el('<button class="btn btn-primary btn-small">Save</button>');
+      saveBtn.addEventListener('click', function(){
+        var na = aIn.value.trim() || state.setup.teamA;
+        var nb = bIn.value.trim() || state.setup.teamB;
+        renameTeams(na, nb);
+        state.editingTeams = false;
+        saveSetup().then(render);
+      });
+      var cancelBtn = el('<button class="btn btn-ghost btn-small">Cancel</button>');
+      cancelBtn.addEventListener('click', function(){ state.editingTeams = false; render(); });
+      form.appendChild(aIn); form.appendChild(bIn); form.appendChild(saveBtn); form.appendChild(cancelBtn);
+      wrap.appendChild(form);
+    }
+    return wrap;
+  }
+
+  function renderTabs(){
+    var wrap = document.createDocumentFragment();
+    var tabs = el('<div class="tabs"></div>');
+    [['odds','Match odds'],['rounds','Rounds'],['players','Players'],['penalty','Penalty & custom'],['bets','Bets & board']].forEach(function(t){
+      var b = el('<button class="tab-btn"></button>'); b.textContent=t[1];
+      if(state.tab===t[0]) b.className+=' active';
+      b.addEventListener('click', function(){ state.tab=t[0]; state.openBet=null; state.editingSel=null; render(); });
+      tabs.appendChild(b);
+    });
+    wrap.appendChild(tabs);
+    return wrap;
+  }
+
+  function renderActiveTab(){
+    if(state.tab==='odds') return renderScopePanel('overall','Overall match');
+    if(state.tab==='rounds') return renderRoundsTab();
+    if(state.tab==='players') return renderPlayersTab();
+    if(state.tab==='penalty') return renderPenaltyTab();
+    return renderBetsTab();
+  }
+
+  function renderRoundsTab(){
+    var frag = document.createDocumentFragment();
+    var sub = el('<div class="subtabs"></div>');
+    [1,2,3].forEach(function(n){
+      var b = el('<button class="subtab-btn"></button>'); b.textContent='Round '+n;
+      if(state.roundSub===n) b.className+=' active';
+      b.addEventListener('click', function(){ state.roundSub=n; state.openBet=null; state.editingSel=null; render(); });
+      sub.appendChild(b);
+    });
+    frag.appendChild(sub);
+    frag.appendChild(renderScopePanel('round'+state.roundSub, 'Round '+state.roundSub));
+    return frag;
+  }
+
+  function settleScope(scopeKey, home, away){
+    var m = state.setup.markets;
+    var resM = m[scopeKey+'_result'];
+    resM.winners = [ home>away ? 'A' : (away>home ? 'B' : 'D') ];
+    resM.settled = true;
+    var csM = m[scopeKey+'_cs'];
+    var match = csM.selections.find(function(s){ return s.label === (home+'-'+away); });
+    csM.winners = match ? [match.id] : [];
+    csM.settled = true;
+    for(var i=0;i<=20;i++){
+      var line = i+0.5;
+      var ouM = m[scopeKey+'_ou_'+line];
+      ouM.winners = [ (home+away) > line ? 'O' : 'U' ];
+      ouM.settled = true;
+    }
+    state.setup.scores[scopeKey] = {home:home, away:away};
+  }
+
+  function resolveWagers(){
+    var m = state.setup.markets;
+    var custom = {}; state.setup.customMarkets.forEach(function(c){ custom[c.id]=c; });
+    var act = state.activity;
+    Object.keys(act.wagers).forEach(function(name){
+      act.wagers[name].forEach(function(w){
+        if(w.resolved) return;
+        var mk = m[w.marketId] || custom[w.marketId];
+        if(!mk || !mk.settled) return;
+        w.resolved = true;
+        if(mk.winners.indexOf(w.selId) !== -1){
+          w.result = 'won';
+          w.payout = Math.round(w.stake * w.oddsAtStake * 100)/100;
+          act.balances[name] = Math.round(((act.balances[name]||0) + w.payout)*100)/100;
+        } else {
+          w.result = 'lost';
+          w.payout = 0;
+        }
+      });
+    });
+  }
+
+  function renderScopePanel(scopeKey, title){
+    var frag = document.createDocumentFragment();
+    var m = state.setup.markets;
+    var panel = el('<div class="panel"></div>');
+    var h = el('<h3></h3>'); h.textContent = title + ' odds';
+    panel.appendChild(h);
+
+    var savedScore = state.setup.scores[scopeKey];
+    if(state.isAdmin){
+      var entry = el('<div class="score-entry"></div>');
+      entry.innerHTML = '<span class="lbl">'+esc(state.setup.teamA)+'</span>'
+        + '<input type="number" min="0" max="99" id="sc-h" value="'+(savedScore?savedScore.home:0)+'">'
+        + '<span class="lbl">–</span>'
+        + '<input type="number" min="0" max="99" id="sc-a" value="'+(savedScore?savedScore.away:0)+'">'
+        + '<span class="lbl">'+esc(state.setup.teamB)+'</span>';
+      var settleBtn = el('<button class="btn btn-primary btn-small">'+(savedScore?'Update result':'Settle with final score')+'</button>');
+      settleBtn.addEventListener('click', function(){
+        var h1 = parseInt(entry.querySelector('#sc-h').value,10)||0;
+        var a1 = parseInt(entry.querySelector('#sc-a').value,10)||0;
+        settleScope(scopeKey, h1, a1);
+        resolveWagers();
+        saveSetup(); saveActivity();
+        render();
+      });
+      entry.appendChild(settleBtn);
+      if(savedScore){ entry.appendChild(el('<span class="final-tag">Final '+savedScore.home+'-'+savedScore.away+'</span>')); }
+      panel.appendChild(entry);
+    } else if(savedScore){
+      panel.appendChild(el('<p class="final-tag" style="margin:0 0 12px;">Final score '+savedScore.home+'-'+savedScore.away+'</p>'));
+    }
+
+    panel.appendChild(el('<h4>Match result</h4>'));
+    panel.appendChild(renderFixedMarket(m[scopeKey+'_result']));
+
+    panel.appendChild(el('<h4>Correct score</h4>'));
+    panel.appendChild(renderCorrectScore(m[scopeKey+'_cs']));
+
+    panel.appendChild(el('<h4>Total goals — over/under</h4>'));
+    panel.appendChild(renderOverUnder(scopeKey));
+
+    frag.appendChild(panel);
+    return frag;
+  }
+
+  function renderFixedMarket(market){
+    var box = el('<div></div>');
+    market.selections.forEach(function(sel){
+      box.appendChild(renderSelRow(market, sel));
+    });
+    if(market.settled){
+      var winnerLabels = market.selections.filter(function(s){return market.winners.indexOf(s.id)!==-1;}).map(function(s){return s.label;});
+      box.appendChild(el('<p class="win-tag" style="display:inline-block;margin-top:6px;">Settled — '+esc(winnerLabels.join(', ')||'no winner')+'</p>'));
+    }
+    return box;
+  }
+
+  function renderSelRow(market, sel, manageable){
+    var row = el('<div class="sel-row"></div>');
+    var editKey = market.id+'|'+sel.id;
+    if(manageable && state.isAdmin && state.editingSel===editKey){
+      var editIn = el('<input type="text" style="flex:1;min-width:80px;padding:6px 8px;border-radius:6px;border:1.5px solid #DCD7C8;font-size:13px;">');
+      editIn.value = sel.label;
+      row.appendChild(editIn);
+      var saveBtn = el('<button class="btn btn-ghost btn-small" style="padding:4px 8px;">Save</button>');
+      saveBtn.addEventListener('click', function(){
+        var v = editIn.value.trim();
+        if(v) sel.label = v;
+        state.editingSel = null;
+        saveSetup().then(render);
+      });
+      row.appendChild(saveBtn);
+      var cancelBtn = el('<button class="btn btn-ghost btn-small" style="padding:4px 8px;">Cancel</button>');
+      cancelBtn.addEventListener('click', function(){ state.editingSel=null; render(); });
+      row.appendChild(cancelBtn);
+      return row;
+    }
+    var label = el('<span class="sel-label"></span>'); label.textContent = sel.label;
+    row.appendChild(label);
+    if(state.isAdmin){
+      var input = el('<input class="odds-input" type="number" min="1.01" step="0.01" placeholder="–">');
+      if(sel.odds!=null) input.value = sel.odds;
+      input.addEventListener('change', function(){
+        var v = parseFloat(input.value);
+        sel.odds = (isNaN(v)||v<1) ? null : v;
+        saveSetup();
+      });
+      row.appendChild(input);
+      if(manageable){
+        var editBtn = el('<button class="btn btn-ghost btn-small" style="padding:4px 8px;">Edit</button>');
+        editBtn.addEventListener('click', function(){ state.editingSel = editKey; render(); });
+        row.appendChild(editBtn);
+        var rmBtn = el('<button class="btn btn-ghost btn-small" style="padding:4px 8px;">×</button>');
+        rmBtn.addEventListener('click', function(){
+          if(!confirm('Remove "'+sel.label+'"?')) return;
+          market.selections = market.selections.filter(function(s){ return s.id!==sel.id; });
+          saveSetup().then(render);
+        });
+        row.appendChild(rmBtn);
+      }
+    } else {
+      if(market.settled){
+        var won = market.winners.indexOf(sel.id)!==-1;
+        row.appendChild(el('<span class="wager-status '+(won?'st-won':'st-lost')+'">'+(won?'Won':'—')+'</span>'));
+      } else {
+        renderBetTrigger(row, market, sel);
+      }
+    }
+    return row;
+  }
+
+  function renderBetTrigger(row, market, sel){
+    var openId = market.id+'|'+sel.id;
+    var oddsStr = fmtOdds(sel.odds);
+    var chip = el('<button class="odds-chip"></button>');
+    chip.textContent = oddsStr ? '@ '+oddsStr : 'TBD';
+    if(!oddsStr){ chip.disabled = true; }
+    chip.addEventListener('click', function(){
+      state.openBet = (state.openBet===openId) ? null : openId;
+      render();
+    });
+    row.appendChild(chip);
+    if(state.openBet===openId){
+      var form = renderBetForm(market, sel);
+      row.after ? row.after(form) : row.parentNode && row.parentNode.appendChild(form);
+    }
+  }
+
+  function renderBetForm(market, sel){
+    var form = el('<div class="bet-inline"></div>');
+    var nameIn = el('<input type="text" placeholder="Your name" style="flex:1;min-width:100px;">');
+    nameIn.value = state.userName;
+    var stakeIn = el('<input type="number" name="stake" min="1" step="1" value="50">');
+    var ret = el('<span class="ret"></span>');
+    function updateRet(){
+      var st = parseFloat(stakeIn.value)||0;
+      ret.textContent = 'Returns ' + (Math.round(st*sel.odds*100)/100) + ' pts';
+    }
+    updateRet();
+    stakeIn.addEventListener('input', updateRet);
+    var confirmBtn = el('<button class="btn btn-primary btn-small">Place bet</button>');
+    confirmBtn.addEventListener('click', function(){
+      var name = nameIn.value.trim();
+      var stake = parseFloat(stakeIn.value);
+      if(!name){ alert('Enter your name.'); return; }
+      if(!stake || stake<=0){ alert('Enter a stake.'); return; }
+      state.userName = name;
+      if(state.activity.balances[name]===undefined) state.activity.balances[name]=1000;
+      if(stake > state.activity.balances[name]){ alert('Not enough points. Balance: '+state.activity.balances[name]); return; }
+      state.activity.balances[name] -= stake;
+      state.activity.wagers[name] = state.activity.wagers[name] || [];
+      state.activity.wagers[name].push({
+        id: Date.now()+'-'+Math.random().toString(36).slice(2,7),
+        marketId: market.id, marketLabel: market.label, selId: sel.id, selLabel: sel.label,
+        oddsAtStake: sel.odds, stake: stake, ts: Date.now(), resolved:false, result:null, payout:0
+      });
+      state.openBet = null;
+      saveActivity().then(render);
+    });
+    var cancelBtn = el('<button class="btn btn-ghost btn-small">Cancel</button>');
+    cancelBtn.addEventListener('click', function(){ state.openBet=null; render(); });
+    form.appendChild(nameIn); form.appendChild(stakeIn); form.appendChild(ret); form.appendChild(confirmBtn); form.appendChild(cancelBtn);
+    return form;
+  }
+
+  function renderCorrectScore(market){
+    var box = el('<div></div>');
+    var list = el('<div class="cs-list"></div>');
+    if(market.selections.length===0){ list.appendChild(el('<span class="empty-note" style="padding:4px;">No scorelines added yet.</span>')); }
+    market.selections.forEach(function(sel){
+      var chip = el('<div class="cs-chip"></div>');
+      var won = market.settled && market.winners.indexOf(sel.id)!==-1;
+      var editKey = market.id+'|'+sel.id;
+      if(state.isAdmin && state.editingSel===editKey){
+        var parts = sel.label.split('-');
+        var hIn = el('<input type="number" min="0" max="30" style="width:40px;padding:5px;border-radius:5px;border:1.5px solid #DCD7C8;text-align:center;">'); hIn.value = parts[0]||0;
+        var aIn = el('<input type="number" min="0" max="30" style="width:40px;padding:5px;border-radius:5px;border:1.5px solid #DCD7C8;text-align:center;">'); aIn.value = parts[1]||0;
+        chip.appendChild(hIn); chip.appendChild(el('<span>–</span>')); chip.appendChild(aIn);
+        var saveBtn = el('<button class="btn btn-ghost btn-small" style="padding:2px 7px;">Save</button>');
+        saveBtn.addEventListener('click', function(){
+          var newLabel = (parseInt(hIn.value,10)||0)+'-'+(parseInt(aIn.value,10)||0);
+          if(market.selections.some(function(s){return s.id!==sel.id && s.label===newLabel;})){ alert('That scoreline already exists.'); return; }
+          sel.label = newLabel; state.editingSel=null; saveSetup().then(render);
+        });
+        chip.appendChild(saveBtn);
+        var cancelBtn = el('<button class="btn btn-ghost btn-small" style="padding:2px 7px;">Cancel</button>');
+        cancelBtn.addEventListener('click', function(){ state.editingSel=null; render(); });
+        chip.appendChild(cancelBtn);
+        list.appendChild(chip);
+        return;
+      }
+      chip.innerHTML = '<span>'+esc(sel.label)+'</span>';
+      if(state.isAdmin){
+        var input = el('<input class="odds-input" style="width:52px;" type="number" min="1.01" step="0.01">');
+        if(sel.odds!=null) input.value=sel.odds;
+        input.addEventListener('change', function(){ var v=parseFloat(input.value); sel.odds=(isNaN(v)||v<1)?null:v; saveSetup(); });
+        chip.appendChild(input);
+        var editBtn = el('<button class="btn btn-ghost btn-small" style="padding:2px 7px;">Edit</button>');
+        editBtn.addEventListener('click', function(){ state.editingSel=editKey; render(); });
+        chip.appendChild(editBtn);
+        var rm = el('<button class="btn btn-ghost btn-small" style="padding:2px 7px;">×</button>');
+        rm.addEventListener('click', function(){
+          if(!confirm('Remove scoreline "'+sel.label+'"?')) return;
+          market.selections = market.selections.filter(function(s){return s.id!==sel.id;}); saveSetup().then(render);
+        });
+        chip.appendChild(rm);
+      } else if(market.settled){
+        chip.appendChild(el('<span class="wager-status '+(won?'st-won':'st-lost')+'">'+(won?'Won':'—')+'</span>'));
+      } else {
+        var trigWrap = el('<span></span>');
+        renderBetTrigger(trigWrap, market, sel);
+        chip.appendChild(trigWrap);
+      }
+      list.appendChild(chip);
+    });
+    box.appendChild(list);
+    if(state.isAdmin){
+      var addForm = el('<div class="add-form"></div>');
+      var h = el('<input type="number" min="0" max="30" placeholder="H" value="1">');
+      var a = el('<input type="number" min="0" max="30" placeholder="A" value="0">');
+      var oddsIn = el('<input type="number" min="1.01" step="0.01" placeholder="Odds" style="width:70px;">');
+      var addBtn = el('<button class="btn btn-ghost btn-small">Add scoreline</button>');
+      addBtn.addEventListener('click', function(){
+        var hv = parseInt(h.value,10)||0, av = parseInt(a.value,10)||0, ov = parseFloat(oddsIn.value);
+        if(!ov || ov<1){ alert('Set odds for this scoreline.'); return; }
+        var label = hv+'-'+av;
+        if(market.selections.some(function(s){return s.label===label;})){ alert('That scoreline is already added.'); return; }
+        market.selections.push({ id:'cs'+Date.now(), label:label, odds:ov });
+        saveSetup().then(render);
+      });
+      addForm.appendChild(h); addForm.appendChild(el('<span>–</span>')); addForm.appendChild(a); addForm.appendChild(oddsIn); addForm.appendChild(addBtn);
+      box.appendChild(addForm);
+    }
+    return box;
+  }
+
+  function renderOverUnder(scopeKey){
+    var scroll = el('<div class="ou-scroll"></div>');
+    var m = state.setup.markets;
+    for(var i=0;i<=20;i++){
+      var line = i+0.5;
+      var market = m[scopeKey+'_ou_'+line];
+      var row = el('<div class="sel-row"></div>');
+      row.appendChild(el('<span class="sel-label">'+line+'</span>'));
+      var overWrap = el('<span style="display:flex;gap:6px;align-items:center;"></span>');
+      ['O','U'].forEach(function(sid){
+        var sel = market.selections.find(function(s){return s.id===sid;});
+        if(state.isAdmin){
+          var input = el('<input class="odds-input" style="width:56px;" type="number" min="1.01" step="0.01" placeholder="'+(sid==='O'?'Ov':'Un')+'">');
+          if(sel.odds!=null) input.value = sel.odds;
+          input.addEventListener('change', function(sel){ return function(){ var v=parseFloat(this.value); sel.odds=(isNaN(v)||v<1)?null:v; saveSetup(); }; }(sel));
+          overWrap.appendChild(input);
+        } else if(market.settled){
+          var won = market.winners.indexOf(sid)!==-1;
+          overWrap.appendChild(el('<span class="wager-status '+(won?'st-won':'st-lost')+'" style="margin-right:4px;">'+sid+(won?' ✓':'')+'</span>'));
+        } else {
+          var w = el('<span style="margin-right:4px;"></span>');
+          renderBetTrigger(w, market, sel);
+          overWrap.appendChild(w);
+        }
+      });
+      row.appendChild(overWrap);
+      scroll.appendChild(row);
+      if(state.openBet && state.openBet.indexOf(market.id+'|')===0){
+        var selId = state.openBet.split('|')[1];
+        var sel2 = market.selections.find(function(s){return s.id===selId;});
+        scroll.appendChild(renderBetForm(market, sel2));
+      }
+    }
+    return scroll;
+  }
+
+  function renderPlayersTab(){
+    var frag = document.createDocumentFragment();
+    ['scorer_A','scorer_B'].forEach(function(mid){
+      var market = state.setup.markets[mid];
+      var panel = el('<div class="panel"></div>');
+      panel.appendChild(el('<h3>'+esc(market.label)+'</h3>'));
+      market.selections.forEach(function(sel){
+        panel.appendChild(renderSelRow(market, sel, true));
+      });
+      if(state.isAdmin){
+        var addForm = el('<div class="add-form"></div>');
+        var nameIn = el('<input type="text" placeholder="Add player name">');
+        var oddsIn = el('<input type="number" min="1.01" step="0.01" placeholder="Odds" style="width:70px;">');
+        var addBtn = el('<button class="btn btn-ghost btn-small">Add player</button>');
+        addBtn.addEventListener('click', function(){
+          var nm = nameIn.value.trim(); var ov = parseFloat(oddsIn.value);
+          if(!nm){ alert('Enter a player name.'); return; }
+          market.selections.push({ id:'p'+Date.now(), label:nm, odds:(ov&&ov>=1)?ov:null });
+          saveSetup().then(render);
+        });
+        addForm.appendChild(nameIn); addForm.appendChild(oddsIn); addForm.appendChild(addBtn);
+        panel.appendChild(addForm);
+      }
+      if(market.settled){
+        var winnerLabels = market.selections.filter(function(s){return market.winners.indexOf(s.id)!==-1;}).map(function(s){return s.label;});
+        panel.appendChild(el('<p class="win-tag" style="display:inline-block;margin-top:8px;">Scored: '+esc(winnerLabels.join(', ')||'nobody')+'</p>'));
+      }
+      if(state.isAdmin){ panel.appendChild(renderManualSettle(market)); }
+      frag.appendChild(panel);
+    });
+    return frag;
+  }
+
+  function renderPenaltyTab(){
+    var frag = document.createDocumentFragment();
+    var market = state.setup.markets['penalty'];
+    var panel = el('<div class="panel"></div>');
+    panel.appendChild(el('<h3>'+esc(market.label)+'</h3>'));
+    market.selections.forEach(function(sel){ panel.appendChild(renderSelRow(market, sel, true)); });
+    if(state.isAdmin){
+      var addForm = el('<div class="add-form"></div>');
+      var labelIn = el('<input type="text" placeholder="Selection, e.g. Quyết scores a penalty">');
+      var oddsIn = el('<input type="number" min="1.01" step="0.01" placeholder="Odds" style="width:70px;">');
+      var addBtn = el('<button class="btn btn-ghost btn-small">Add selection</button>');
+      addBtn.addEventListener('click', function(){
+        var lb = labelIn.value.trim(); var ov = parseFloat(oddsIn.value);
+        if(!lb){ alert('Enter a selection label.'); return; }
+        market.selections.push({ id:'pn'+Date.now(), label:lb, odds:(ov&&ov>=1)?ov:null });
+        saveSetup().then(render);
+      });
+      addForm.appendChild(labelIn); addForm.appendChild(oddsIn); addForm.appendChild(addBtn);
+      panel.appendChild(addForm);
+    }
+    if(market.settled){
+      var wl = market.selections.filter(function(s){return market.winners.indexOf(s.id)!==-1;}).map(function(s){return s.label;});
+      panel.appendChild(el('<p class="win-tag" style="display:inline-block;margin-top:8px;">Settled: '+esc(wl.join(', ')||'no winner')+'</p>'));
+    }
+    if(state.isAdmin){ panel.appendChild(renderManualSettle(market)); }
+    frag.appendChild(panel);
+
+    var customPanel = el('<div class="panel"></div>');
+    customPanel.appendChild(el('<h3>Custom markets</h3>'));
+    if(state.setup.customMarkets.length===0){
+      customPanel.appendChild(el('<p class="empty-note">No custom markets yet.</p>'));
+    }
+    state.setup.customMarkets.forEach(function(cm){
+      customPanel.appendChild(el('<h4>'+esc(cm.label)+'</h4>'));
+      cm.selections.forEach(function(sel){ customPanel.appendChild(renderSelRow(cm, sel, true)); });
+      if(state.isAdmin){
+        var addForm2 = el('<div class="add-form"></div>');
+        var labelIn2 = el('<input type="text" placeholder="Selection label">');
+        var oddsIn2 = el('<input type="number" min="1.01" step="0.01" placeholder="Odds" style="width:70px;">');
+        var addBtn2 = el('<button class="btn btn-ghost btn-small">Add selection</button>');
+        addBtn2.addEventListener('click', function(){
+          var lb = labelIn2.value.trim(); var ov = parseFloat(oddsIn2.value);
+          if(!lb){ alert('Enter a selection label.'); return; }
+          cm.selections.push({ id:'cm'+Date.now(), label:lb, odds:(ov&&ov>=1)?ov:null });
+          saveSetup().then(render);
+        });
+        addForm2.appendChild(labelIn2); addForm2.appendChild(oddsIn2); addForm2.appendChild(addBtn2);
+        customPanel.appendChild(addForm2);
+      }
+      if(cm.settled){
+        var wl2 = cm.selections.filter(function(s){return cm.winners.indexOf(s.id)!==-1;}).map(function(s){return s.label;});
+        customPanel.appendChild(el('<p class="win-tag" style="display:inline-block;margin:6px 0;">Settled: '+esc(wl2.join(', ')||'no winner')+'</p>'));
+      }
+      if(state.isAdmin){ customPanel.appendChild(renderManualSettle(cm)); }
+    });
+    if(state.isAdmin){
+      var newMarketForm = el('<div class="add-form" style="margin-top:10px;border-top:1px solid #ECE7D9;padding-top:10px;"></div>');
+      var nmLabel = el('<input type="text" placeholder="New market name, e.g. Man of the match">');
+      var nmBtn = el('<button class="btn btn-ghost btn-small">Create market</button>');
+      nmBtn.addEventListener('click', function(){
+        var lb = nmLabel.value.trim();
+        if(!lb){ alert('Name the market first.'); return; }
+        state.setup.customMarkets.push({ id:'custom'+Date.now(), type:'custom', label:lb, selections:[], settled:false, winners:[] });
+        saveSetup().then(render);
+      });
+      newMarketForm.appendChild(nmLabel); newMarketForm.appendChild(nmBtn);
+      customPanel.appendChild(newMarketForm);
+    }
+    frag.appendChild(customPanel);
+    return frag;
+  }
+
+  function renderManualSettle(market){
+    var box = el('<div style="margin-top:10px;border-top:1px solid #ECE7D9;padding-top:10px;"></div>');
+    if(market.selections.length===0) return box;
+    var label = el('<p style="font-size:11px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;margin:0 0 6px;">Settle — tick the winner(s)</p>');
+    box.appendChild(label);
+    var checks = [];
+    market.selections.forEach(function(sel){
+      var row = el('<label class="settle-check"></label>');
+      var cb = el('<input type="checkbox">');
+      cb.checked = market.winners.indexOf(sel.id)!==-1;
+      checks.push({cb:cb, sel:sel});
+      row.appendChild(cb);
+      row.appendChild(el('<span>'+esc(sel.label)+'</span>'));
+      box.appendChild(row);
+    });
+    var btn = el('<button class="btn btn-primary btn-small" style="margin-top:8px;">'+(market.settled?'Re-settle market':'Settle market')+'</button>');
+    btn.addEventListener('click', function(){
+      market.winners = checks.filter(function(c){return c.cb.checked;}).map(function(c){return c.sel.id;});
+      market.settled = true;
+      resolveWagers();
+      saveSetup(); saveActivity();
+      render();
+    });
+    box.appendChild(btn);
+    return box;
+  }
+
+  function renderBetsTab(){
+    var frag = document.createDocumentFragment();
+    var panel = el('<div class="panel"></div>');
+    panel.appendChild(el('<h3>My bets</h3>'));
+    var nameIn = el('<input class="name-input" type="text" placeholder="Type your name to see your bets">');
+    nameIn.value = state.userName;
+    panel.appendChild(nameIn);
+    var listBox = el('<div></div>');
+    panel.appendChild(listBox);
+    function refreshList(){
+      var name = nameIn.value.trim();
+      listBox.innerHTML='';
+      if(!name){ listBox.appendChild(el('<p class="empty-note">Enter your name above.</p>')); return; }
+      var bal = state.activity.balances[name];
+      listBox.appendChild(el('<p style="font-family:\'Space Mono\',monospace;font-weight:700;margin:0 0 8px;">Balance: '+(bal===undefined?1000:bal)+' pts</p>'));
+      var ws = state.activity.wagers[name] || [];
+      if(ws.length===0){ listBox.appendChild(el('<p class="empty-note">No bets placed yet.</p>')); return; }
+      ws.slice().reverse().forEach(function(w){
+        var row = el('<div class="wager-row"></div>');
+        var status = w.resolved ? (w.result==='won'?'won':'lost') : 'pending';
+        var stCls = status==='won'?'st-won':(status==='lost'?'st-lost':'st-pending');
+        row.innerHTML = '<span>'+esc(w.marketLabel)+' — '+esc(w.selLabel)+' @'+fmtOdds(w.oddsAtStake)+' · '+w.stake+' pts</span>'
+          + '<span class="wager-status '+stCls+'">'+status+(status==='won'?' +'+w.payout:'')+'</span>';
+        listBox.appendChild(row);
+      });
+    }
+    nameIn.addEventListener('input', function(){ state.userName = nameIn.value.trim(); refreshList(); });
+    refreshList();
+    frag.appendChild(panel);
+
+    var lb = el('<div class="panel"></div>');
+    lb.appendChild(el('<h3>Leaderboard</h3>'));
+    var names = Object.keys(state.activity.balances);
+    if(names.length===0){
+      lb.appendChild(el('<p class="empty-note">Nobody has bet yet.</p>'));
+    } else {
+      names.sort(function(a,b){ return state.activity.balances[b]-state.activity.balances[a]; });
+      names.forEach(function(name,i){
+        var row = el('<div class="board-row"></div>');
+        row.innerHTML = '<span class="pos '+(i===0?'gold':'')+'">'+(i+1)+'</span>'
+          + '<span>'+esc(name)+'</span>'
+          + '<span class="board-pts">'+state.activity.balances[name]+' pts</span>';
+        lb.appendChild(row);
+      });
+    }
+    frag.appendChild(lb);
+    return frag;
+  }
+
+  loadAll();
+})();
+</script>
+</body>
+</html>
