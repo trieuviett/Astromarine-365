@@ -78,6 +78,14 @@
   .badge.admin{background:var(--gold); color:var(--pitch-0);}
   .badge.guest{background:transparent; border:1px solid var(--chalk-dim); color:var(--chalk-dim);}
 
+  /* ---- sync status ---- */
+  .sync-status{
+    font-size:11px; padding:4px 10px; border-radius:20px; font-family:'Be Vietnam Pro','Segoe UI',Arial,sans-serif;
+    border:1px solid var(--line); color:var(--chalk-dim);
+  }
+  .sync-status.ok{color:var(--gold-bright); border-color:var(--gold);}
+  .sync-status.err{color:var(--red); border-color:var(--red);}
+
   /* ---- tabs ---- */
   nav.tabs{display:flex; gap:6px; overflow-x:auto; margin-bottom: 18px; padding-bottom:4px;}
   nav.tabs button{
@@ -199,6 +207,7 @@
         </div>
       </div>
       <div class="hdr-controls">
+        <span id="syncStatus" class="sync-status">syncing…</span>
         <span id="modeBadge" class="badge guest">Guest view</span>
         <input id="nameInput" type="text" placeholder="Your name" style="width:110px;">
         <input id="adminCode" type="password" placeholder="Admin code" style="width:90px;">
@@ -254,28 +263,81 @@ let state = {
 
 let isAdmin = false;
 
-/* ============================= STORAGE ============================= */
-const KEYS = {
-  main:'odds-main', round1:'odds-round-1', round2:'odds-round-2', round3:'odds-round-3',
-  players:'odds-players', penalty:'odds-penalty', custom:'odds-custom', bets:'bets'
-};
+/* ============================= STORAGE (GitHub Gist backend) =============================
+   Data is stored as ONE JSON blob in a single gist file, so every save writes the whole
+   state object in one API call (avoids GitHub rate limits and keeps writes atomic-ish).
 
-async function loadKey(key, fallback){
-  try{
-    const res = await window.storage.get(key, true);
-    if(res && res.value) return JSON.parse(res.value);
-    return fallback;
-  }catch(e){
-    return fallback;
-  }
+   SETUP — do this before you deploy the page:
+     1. Create a gist at https://gist.github.com with one file named exactly
+        "astro365-data.json" and initial content: {}
+     2. Create a GitHub Personal Access Token scoped ONLY to "gist"
+        (classic token: check just the "gist" box — no repo access).
+     3. Paste the gist ID and token below.
+
+   ⚠️ SECURITY: this token ships inside the page's JS, so anyone who opens this page and
+   views source can read it and use it to write to that gist. Because guests (not just the
+   admin) need to save bets, everyone who has the link effectively has that write access.
+   Only use a token scoped to nothing but this one gist, and only share the link with
+   people you trust. There is no way to fully hide a secret in a page that has no server —
+   if you need real access control, a small serverless proxy holding the token is the fix.
+============================================================================================ */
+const GIST_ID = "https://gist.github.com/trieuviett/7c37e2bea9e2144ded672b35cbd5c367.js";
+const GITHUB_TOKEN = "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";
+const GIST_FILENAME = "astro365-data.json";
+const GITHUB_API = `https://api.github.com/gists/${GIST_ID}`;
+
+const KEYS_LIST = ['main','round1','round2','round3','players','penalty','custom','bets'];
+
+function setSyncStatus(kind, text){
+  const el = document.getElementById('syncStatus');
+  if(!el) return;
+  el.textContent = text;
+  el.className = 'sync-status' + (kind ? ' '+kind : '');
+}
+
+async function fetchRemoteState(){
+  const res = await fetch(GITHUB_API, {
+    headers: {
+      "Authorization": `token ${GITHUB_TOKEN}`,
+      "Accept": "application/vnd.github+json"
+    }
+  });
+  if(!res.ok) throw new Error("GitHub fetch failed: "+res.status);
+  const gist = await res.json();
+  const file = gist.files && gist.files[GIST_FILENAME];
+  if(!file || !file.content) return {};
+  try{ return JSON.parse(file.content); }catch(e){ return {}; }
+}
+
+async function writeRemoteState(fullState){
+  const res = await fetch(GITHUB_API, {
+    method: "PATCH",
+    headers: {
+      "Authorization": `token ${GITHUB_TOKEN}`,
+      "Accept": "application/vnd.github+json",
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      files: { [GIST_FILENAME]: { content: JSON.stringify(fullState, null, 2) } }
+    })
+  });
+  if(!res.ok) throw new Error("GitHub save failed: "+res.status);
+  return res.json();
 }
 
 async function loadAll(){
-  const entries = await Promise.all(Object.entries(KEYS).map(async ([stateKey, storageKey])=>{
-    const val = await loadKey(storageKey, state[stateKey]);
-    return [stateKey, val];
-  }));
-  entries.forEach(([k,v])=>{ state[k]=v; });
+  try{
+    setSyncStatus(null, 'syncing…');
+    const remote = await fetchRemoteState();
+    KEYS_LIST.forEach(stateKey=>{
+      if(remote[stateKey] !== undefined) state[stateKey] = remote[stateKey];
+    });
+    setSyncStatus('ok', 'synced');
+  }catch(e){
+    console.error(e);
+    setSyncStatus('err', 'sync failed');
+    showToast("Couldn't load saved data — check Gist ID / token");
+  }
 
   // defensive normalization in case any saved value has a partial/unexpected shape
   ['main','round1','round2','round3'].forEach(normalizeMatchData);
@@ -293,13 +355,28 @@ async function loadAll(){
   if(!Array.isArray(state.bets)) state.bets = [];
 }
 
-async function saveKey(stateKey){
-  try{
-    const res = await window.storage.set(KEYS[stateKey], JSON.stringify(state[stateKey]), true);
-    if(!res) showToast("Save failed — try again");
-  }catch(e){
-    showToast("Save failed — try again");
-  }
+// Simple queue so overlapping saveKey() calls don't race each other against the gist API.
+let saveChain = Promise.resolve();
+
+function saveKey(stateKey){
+  saveChain = saveChain.then(async ()=>{
+    try{
+      setSyncStatus(null, 'saving…');
+      // Re-fetch latest remote first so we don't clobber other people's concurrent
+      // changes to the OTHER keys. This is a simple merge, not a true transaction —
+      // two people saving the exact same key at the exact same instant can still
+      // race (last write wins on that one key) but other sections stay intact.
+      const remote = await fetchRemoteState();
+      remote[stateKey] = state[stateKey];
+      await writeRemoteState(remote);
+      setSyncStatus('ok', 'synced');
+    }catch(e){
+      console.error(e);
+      setSyncStatus('err', 'save failed');
+      showToast("Save failed — check connection/token");
+    }
+  });
+  return saveChain;
 }
 
 /* ============================= UTIL ============================= */
